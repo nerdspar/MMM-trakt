@@ -50,63 +50,82 @@ Module.register("MMM-trakt", {
 	},
 
 	getDom: function() {
-    let wrapper = document.createElement('div');
-    if (Object.keys(this.traktData).length === 0 && this.traktCode === undefined) {
-      wrapper.innerHTML = 'Error loading module. Please check the logs.';
-    } else if (Object.keys(this.traktData).length === 0) {
-      wrapper.innerHTML = 'Please enter the following on https://trakt.tv/activate: ' + this.traktCode
-				+ '<br> Or scan the following QR Code: <br> <img src="/modules/MMM-trakt/qr-code.svg" alt="QR Code" height="15%" width="15%">';
-    } else {
-      let table = document.createElement('table');
-      table.className = this.config.styling.moduleSize + " traktHeader";
-      for (let show in this.traktData) {
-				let date = moment.utc(this.traktData[show].episode.first_aired).local();
-				if(date.isBetween(moment(), moment().add(this.config.days-1, "d"), 'days', '[]')){
-	        let tableRow = table.insertRow(-1);
-	        tableRow.className = 'normal';
-
-	        // Name
-	        let showTitleCell = tableRow.insertCell();
-	        showTitleCell.innerHTML = this.traktData[show].show.title;
-	        showTitleCell.className = 'bright traktShowTitle';
-
-	        // Episode
-	        let seasonNo = (this.traktData[show].episode.season);
-	        let episode = (this.traktData[show].episode.number);
-	        seasonNo = seasonNo <= 9 ? seasonNo.toLocaleString(undefined, { minimumIntegerDigits: 2 }) : seasonNo.toString();
-					episode = episode <= 9 ? episode.toLocaleString(undefined, { minimumIntegerDigits: 2 }) : episode.toString();
-	        let episodeCell = tableRow.insertCell();
-	        episodeCell.innerHTML = 'S' + seasonNo + 'E' + episode;
-	        episodeCell.className = 'traktEpisode';
-
-	        // Title
-	        if (this.config.styling.showEpisodeTitle) {
-	          let titleCell = tableRow.insertCell();
-	          const episodeTitle = this.traktData[show].episode.title;
-	          titleCell.innerHTML = episodeTitle === null ? '' : '\'' + episodeTitle + '\'';
-	          titleCell.className = "traktTitle";
-	        }
-	        // Airtime
-	        var airtime;
-	        if (this.config.styling.daysUntil) {
-	          airtime = moment.utc(this.traktData[show].episode.first_aired).local().calendar(moment.utc().local(), {
-	            sameDay: '[' + this.translate('TODAY') + '] ' + this.config.styling.daysUntilFormat,
-	            nextDay: '[' + this.translate('TOMORROW') + '] ' + this.config.styling.daysUntilFormat,
-	            nextWeek: this.config.styling.dateFormat,
-	            sameElse: this.config.styling.dateFormat
-	          });
-	        } else {
-	          airtime = moment.utc(this.traktData[show].episode.first_aired).local().format(this.config.styling.dateFormat);
-	        }
-	        let airtimeCell = tableRow.insertCell();
-	        airtimeCell.innerHTML = airtime;
-	        airtimeCell.className = 'light traktAirtime';
-	      }
-	      wrapper.appendChild(table);
+		let wrapper = document.createElement('div');
+	  
+		if (Object.keys(this.traktData).length === 0 && this.traktCode === undefined) {
+		  wrapper.innerHTML = 'Error loading module. Please check the logs.';
+		  return wrapper;
+		}
+	  
+		if (Object.keys(this.traktData).length === 0) {
+		  wrapper.innerHTML = 'Please enter the following on https://trakt.tv/activate: ' + this.traktCode
+			+ '<br> Or scan the following QR Code: <br> <img src="/modules/MMM-trakt/qr-code.svg" alt="QR Code" height="15%" width="15%">';
+		  return wrapper;
+		}
+	  
+		// Convert to array and deduplicate
+		const uniqueEpisodes = [];
+		const seen = new Set();
+	  
+		Object.values(this.traktData).forEach(entry => {
+		  const ep = entry.episode;
+		  const id = `${entry.show.title}-S${ep.season}E${ep.number}-${entry.first_aired}`;
+		  if (!seen.has(id)) {
+			seen.add(id);
+			uniqueEpisodes.push(entry);
+		  }
+		});
+	  
+		// Sort by air date
+		uniqueEpisodes.sort((a, b) => {
+		  return new Date(a.episode.first_aired) - new Date(b.episode.first_aired);
+		});
+	  
+		const table = document.createElement('table');
+		table.className = this.config.styling.moduleSize + " traktHeader";
+	  
+		uniqueEpisodes.forEach(entry => {
+			const episodeDate = moment.utc(entry.first_aired).local();
+		  if (episodeDate.isBetween(moment(), moment().add(this.config.days - 1, "d"), 'days', '[]')) {
+			const row = table.insertRow(-1);
+			row.className = 'normal';
+	  
+			const showTitleCell = row.insertCell();
+			showTitleCell.innerHTML = entry.show.title;
+			showTitleCell.className = 'bright traktShowTitle';
+	  
+			let seasonNo = entry.episode.season;
+			let episodeNo = entry.episode.number;
+			seasonNo = seasonNo <= 9 ? seasonNo.toLocaleString(undefined, { minimumIntegerDigits: 2 }) : seasonNo.toString();
+			episodeNo = episodeNo <= 9 ? episodeNo.toLocaleString(undefined, { minimumIntegerDigits: 2 }) : episodeNo.toString();
+			const epCell = row.insertCell();
+			epCell.innerHTML = `S${seasonNo}E${episodeNo}`;
+			epCell.className = 'traktEpisode';
+	  
+			if (this.config.styling.showEpisodeTitle) {
+			  const titleCell = row.insertCell();
+			  const episodeTitle = entry.episode.title;
+			  titleCell.innerHTML = episodeTitle === null ? '' : `'${episodeTitle}'`;
+			  titleCell.className = "traktTitle";
 			}
-    }
-    return wrapper;
-	},
+	  
+			const airtimeCell = row.insertCell();
+			const formattedTime = this.config.styling.daysUntil
+			  ? episodeDate.calendar(moment.utc().local(), {
+				  sameDay: `[${this.translate('TODAY')}] ` + this.config.styling.daysUntilFormat,
+				  nextDay: `[${this.translate('TOMORROW')}] ` + this.config.styling.daysUntilFormat,
+				  nextWeek: this.config.styling.dateFormat,
+				  sameElse: this.config.styling.dateFormat
+				})
+			  : episodeDate.format(this.config.styling.dateFormat);
+			airtimeCell.innerHTML = formattedTime;
+			airtimeCell.className = 'light traktAirtime';
+		  }
+		});
+	  
+		wrapper.appendChild(table);
+		return wrapper;
+	  },
 	updateTrakt: function() {
 		var self = this;
 		if (self.config.client_id === "") {
