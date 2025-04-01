@@ -34,22 +34,23 @@ To run the module, you need to add the following data to your ` ~/MagicMirror/co
 ```js
 {
   module: 'MMM-trakt',
-  position: 'top_center', // you may choose any location
-  header: 'TV-Shows', // optional
+  position: 'left', // you may choose any location
+  header: 'TV Schedule', // optional
   config: {
-    client_id: 'YOUR_API_CLIENT_ID',
-    client_secret: 'YOUR_API_CLIENT_SECRET',
-    days: 1, // optional, default: 1. 1 = today's episodes, 2 = today's and tomorrow's, 3 = etc...
+    client_id: '195b49845a424fb7f0df6e851cebf2b80e6d1f2a84554f18570728374aa92822',
+    client_secret: '37d67fc2d8c15409d6b65d698d936801e3fd1f87278b343cb155fe51c854a40a',
+    days: 7, // optional, default: 1. 1 = today's episodes, 2 = today's and tomorrow's, 3 = etc...
+    maxItems: 10, // optional, default: 10, changes number of lines to display
     styling : {
-        moduleSize: "small", // optional, possible value: (xsmall, small, medium, large, xlarge), default: small
-        daysUntil: false, // optional, shows 'today' and 'tomorrow' insted of date, default: false
-        daysUntilFormat: "hh:mm", // optional, default: "hh:mm", time format after 'today'. Leave empty ("") to hide, possible values: https://momentjs.com/docs/#/displaying/format/
-        dateFormat: "D.M hh:mm", // optional, default: "D.M hh:mm", possible values: https://momentjs.com/docs/#/displaying/format/
-        showEpisodeTitle: true, // optional, default: true
+        moduleSize: "medium", // optional, possible value: (xsmall, small, medium, large, xlarge), default: s>
+        daysUntil: true, // optional, shows 'today' and 'tomorrow' insted of date, default: false
+        daysUntilFormat: "", // optional, default: "hh:mm", time format after 'today'. Leave empty ("") to hi>
+        dateFormat: "M/D h:mm A", // optional, default: "D.M hh:mm", possible values: https://momentjs.com/do>
+        showEpisodeTitle: false, // optional, default: true
     },
-    debug: false // optional, default: false
+    debug: true // optional, default: false
   }
-}
+},
 
 ```
 

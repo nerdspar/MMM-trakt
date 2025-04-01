@@ -81,51 +81,61 @@ Module.register("MMM-trakt", {
 		  return new Date(a.episode.first_aired) - new Date(b.episode.first_aired);
 		});
 	  
+		// Filter by days range
+		const filteredEpisodes = uniqueEpisodes.filter(entry => {
+		  const episodeDate = moment.utc(entry.first_aired).local();
+		  return episodeDate.isBetween(moment(), moment().add(this.config.days - 1, "d"), 'days', '[]');
+		});
+	  
+		// Limit to maxItems if defined
+		const limitedEpisodes = this.config.maxItems
+		  ? filteredEpisodes.slice(0, this.config.maxItems)
+		  : filteredEpisodes;
+	  
+		// Create table
 		const table = document.createElement('table');
 		table.className = this.config.styling.moduleSize + " traktHeader";
 	  
-		uniqueEpisodes.forEach(entry => {
-			const episodeDate = moment.utc(entry.first_aired).local();
-		  if (episodeDate.isBetween(moment(), moment().add(this.config.days - 1, "d"), 'days', '[]')) {
-			const row = table.insertRow(-1);
-			row.className = 'normal';
+		limitedEpisodes.forEach(entry => {
+		  const episodeDate = moment.utc(entry.first_aired).local();
+		  const row = table.insertRow(-1);
+		  row.className = 'normal';
 	  
-			const showTitleCell = row.insertCell();
-			showTitleCell.innerHTML = entry.show.title;
-			showTitleCell.className = 'bright traktShowTitle';
+		  const showTitleCell = row.insertCell();
+		  showTitleCell.innerHTML = entry.show.title;
+		  showTitleCell.className = 'bright traktShowTitle';
 	  
-			let seasonNo = entry.episode.season;
-			let episodeNo = entry.episode.number;
-			seasonNo = seasonNo <= 9 ? seasonNo.toLocaleString(undefined, { minimumIntegerDigits: 2 }) : seasonNo.toString();
-			episodeNo = episodeNo <= 9 ? episodeNo.toLocaleString(undefined, { minimumIntegerDigits: 2 }) : episodeNo.toString();
-			const epCell = row.insertCell();
-			epCell.innerHTML = `S${seasonNo}E${episodeNo}`;
-			epCell.className = 'traktEpisode';
+		  let seasonNo = entry.episode.season.toString().padStart(2, '0');
+		  let episodeNo = entry.episode.number.toString().padStart(2, '0');
+		  const epCell = row.insertCell();
+		  epCell.innerHTML = `S${seasonNo}E${episodeNo}`;
+		  epCell.className = 'traktEpisode';
 	  
-			if (this.config.styling.showEpisodeTitle) {
-			  const titleCell = row.insertCell();
-			  const episodeTitle = entry.episode.title;
-			  titleCell.innerHTML = episodeTitle === null ? '' : `'${episodeTitle}'`;
-			  titleCell.className = "traktTitle";
-			}
-	  
-			const airtimeCell = row.insertCell();
-			const formattedTime = this.config.styling.daysUntil
-			  ? episodeDate.calendar(moment.utc().local(), {
-				  sameDay: `[${this.translate('TODAY')}] ` + this.config.styling.daysUntilFormat,
-				  nextDay: `[${this.translate('TOMORROW')}] ` + this.config.styling.daysUntilFormat,
-				  nextWeek: this.config.styling.dateFormat,
-				  sameElse: this.config.styling.dateFormat
-				})
-			  : episodeDate.format(this.config.styling.dateFormat);
-			airtimeCell.innerHTML = formattedTime;
-			airtimeCell.className = 'light traktAirtime';
+		  if (this.config.styling.showEpisodeTitle) {
+			const titleCell = row.insertCell();
+			const episodeTitle = entry.episode.title;
+			titleCell.innerHTML = episodeTitle === null ? '' : `'${episodeTitle}'`;
+			titleCell.className = "traktTitle";
 		  }
+	  
+		  const airtimeCell = row.insertCell();
+		  const formattedTime = this.config.styling.daysUntil
+			? episodeDate.calendar(moment.utc().local(), {
+				sameDay: `[${this.translate('TODAY')}] ` + this.config.styling.daysUntilFormat,
+				nextDay: `[${this.translate('TOMORROW')}] ` + this.config.styling.daysUntilFormat,
+				nextWeek: this.config.styling.dateFormat,
+				sameElse: this.config.styling.dateFormat
+			  })
+			: episodeDate.format(this.config.styling.dateFormat);
+		  airtimeCell.innerHTML = formattedTime;
+		  airtimeCell.className = 'light traktAirtime';
 		});
 	  
 		wrapper.appendChild(table);
 		return wrapper;
 	  },
+	  
+	  
 	updateTrakt: function() {
 		var self = this;
 		if (self.config.client_id === "") {
