@@ -26,6 +26,16 @@ Clone the repository into your MagicMirror's modules folder, and install depende
   npm install
 ```
 
+### ⚠️ Important: Use `node-fetch@2`
+
+This module uses `node-fetch@2` for compatibility with MagicMirror’s CommonJS environment.  
+Newer versions of `node-fetch` (v3 and above) are ES modules and will **break** the module with `require()` errors.
+
+Run the following commands after installing dependencies to ensure the correct version is used:
+
+```sh
+npm uninstall node-fetch
+npm install node-fetch@2
 
 ## Configuration
 

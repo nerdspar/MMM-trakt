@@ -1,8 +1,9 @@
+
 /* global Module */
 
 Module.register("MMM-trakt", {
 	defaults: {
-	  updateInterval: 60 * 60 * 1000, // every 60 minutes
+	  updateInterval: 60 * 60 * 1000,
 	  initialLoadDelay: 0,
 	  days: 1,
 	  debug: false,
@@ -18,11 +19,6 @@ Module.register("MMM-trakt", {
 	getTranslations() {
 	  return {
 		en: 'translations/en.json',
-		de: 'translations/de.json',
-		kr: 'translations/kr.json',
-		pt: 'translations/pt.json',
-		sv: 'translations/sv.json',
-		da: 'translations/da.json'
 	  };
 	},
   
@@ -46,7 +42,7 @@ Module.register("MMM-trakt", {
 	  var self = this;
 	  setInterval(function () {
 		self.updateDom();
-	  }, 1000 * 10);
+	  }, 10000);
 	},
   
 	getHeader: function () {
@@ -67,29 +63,26 @@ Module.register("MMM-trakt", {
 		return wrapper;
 	  }
   
-	  const uniqueEpisodes = [];
-	  const seen = new Set();
+	  const allEpisodes = Object.values(this.traktData);
+	  this.debugLog("[MMM-trakt] Raw API Episodes: " + allEpisodes.length);
   
-	  Object.values(this.traktData).forEach(entry => {
+	  const seen = new Set();
+	  const uniqueEpisodes = allEpisodes.filter(entry => {
 		const ep = entry.episode;
 		const id = `${entry.show.title}-S${ep.season}E${ep.number}-${entry.first_aired}`;
-		if (!seen.has(id)) {
+		const isNew = !seen.has(id);
+		if (isNew) {
 		  seen.add(id);
-		  uniqueEpisodes.push(entry);
+		} else {
+		  this.debugLog(`[MMM-trakt] Duplicate: ${id}`);
 		}
+		return isNew;
 	  });
   
-	  uniqueEpisodes.sort((a, b) => {
-		return new Date(a.episode.first_aired) - new Date(b.episode.first_aired);
-	  });
-  
-	  const filteredEpisodes = uniqueEpisodes.filter(entry => {
-		const episodeDate = moment.utc(entry.first_aired).local();
-		return episodeDate.isBetween(moment(), moment().add(this.config.days - 1, "d"), 'days', '[]');
-	  });
+	  this.debugLog("[MMM-trakt] Unique Episodes: " + uniqueEpisodes.length);
   
 	  const groupedEpisodes = {};
-	  filteredEpisodes.forEach(entry => {
+	  uniqueEpisodes.forEach(entry => {
 		const key = `${entry.show.title}-${moment.utc(entry.first_aired).local().format("YYYY-MM-DD")}`;
 		if (!groupedEpisodes[key]) {
 		  groupedEpisodes[key] = [];
@@ -97,54 +90,72 @@ Module.register("MMM-trakt", {
 		groupedEpisodes[key].push(entry);
 	  });
   
-	  const groupedList = Object.values(groupedEpisodes);
-	  const limitedGroups = this.config.maxItems
-		? groupedList.slice(0, this.config.maxItems)
-		: groupedList;
+	  const collapsedEpisodes = Object.values(groupedEpisodes).map(group => {
+		const base = group[0];
+		if (group.length > 1) base.multiple = true;
+		return base;
+	  });
   
-	  const table = document.createElement('table');
+	  this.debugLog("[MMM-trakt] Collapsed Episodes: " + collapsedEpisodes.length);
+  
+	  const filteredEpisodes = collapsedEpisodes.filter(entry => {
+		const date = moment.utc(entry.first_aired).local();
+		const inRange = date.isBetween(moment().startOf("day").subtract(1, "second"), moment().add(this.config.days, "days"), '[]');
+		this.debugLog(`[MMM-trakt] ${entry.show.title} S${entry.episode.season}E${entry.episode.number} on ${entry.first_aired} => in range: ${inRange}`);
+		return inRange;
+	  });
+  
+	  this.debugLog("[MMM-trakt] Filtered Episodes (within " + this.config.days + " days): " + filteredEpisodes.length);
+  
+	  const limitedEpisodes = this.config.maxItems ? filteredEpisodes.slice(0, this.config.maxItems) : filteredEpisodes;
+	  this.debugLog("[MMM-trakt] Limited to maxItems (" + this.config.maxItems + "): " + limitedEpisodes.length);
+  
+	  const table = document.createElement("table");
 	  table.className = this.config.styling.moduleSize + " traktHeader";
   
-	  limitedGroups.forEach(group => {
-		const entry = group[0];
+	  limitedEpisodes.forEach(entry => {
 		const episodeDate = moment.utc(entry.first_aired).local();
 		const row = table.insertRow(-1);
-		row.className = 'normal';
+		row.className = "normal";
   
 		const showTitleCell = row.insertCell();
 		showTitleCell.innerHTML = entry.show.title;
-		showTitleCell.className = 'bright traktShowTitle';
+		showTitleCell.className = "bright traktShowTitle";
   
 		const epCell = row.insertCell();
-		if (group.length === 1) {
-		  const seasonNo = entry.episode.season.toString().padStart(2, '0');
-		  const episodeNo = entry.episode.number.toString().padStart(2, '0');
-		  epCell.innerHTML = `S${seasonNo}E${episodeNo}`;
+		if (entry.multiple) {
+		  epCell.innerHTML = "Multiple";
 		} else {
-		  const season = group[0].episode.season;
-		  const first = group[0].episode.number;
-		  const last = group[group.length - 1].episode.number;
-		  epCell.innerHTML = `S${season.toString().padStart(2, '0')}E${first.toString().padStart(2, '0')}–E${last.toString().padStart(2, '0')}`;
+		  let seasonNo = entry.episode.season.toString().padStart(2, "0");
+		  let episodeNo = entry.episode.number.toString().padStart(2, "0");
+		  epCell.innerHTML = `S${seasonNo}E${episodeNo}`;
 		}
-		epCell.className = 'traktEpisode';
+		epCell.className = "traktEpisode";
   
-		if (this.config.styling.showEpisodeTitle) {
+		if (this.config.styling.showEpisodeTitle && !entry.multiple) {
 		  const titleCell = row.insertCell();
-		  titleCell.innerHTML = group.length === 1 && entry.episode.title ? `'${entry.episode.title}'` : '';
+		  const episodeTitle = entry.episode.title;
+		  titleCell.innerHTML = episodeTitle === null ? "" : `'${episodeTitle}'`;
 		  titleCell.className = "traktTitle";
 		}
   
 		const airtimeCell = row.insertCell();
-		const formattedTime = this.config.styling.daysUntil
-		  ? episodeDate.calendar(moment.utc().local(), {
-			sameDay: `[${this.translate('TODAY')}] ` + this.config.styling.daysUntilFormat,
-			nextDay: `[${this.translate('TOMORROW')}] ` + this.config.styling.daysUntilFormat,
-			nextWeek: this.config.styling.dateFormat,
-			sameElse: this.config.styling.dateFormat
-		  })
-		  : episodeDate.format(this.config.styling.dateFormat);
+		const now = moment();
+		const daysDiff = episodeDate.startOf("day").diff(now.startOf("day"), "days");
+		let formattedTime = "";
+  
+		if (daysDiff === 0) {
+		  formattedTime = "Today";
+		} else if (daysDiff === 1) {
+		  formattedTime = "Tomorrow";
+		} else if (daysDiff > 1 && daysDiff <= 6) {
+		  formattedTime = episodeDate.format("dddd");
+		} else {
+		  formattedTime = episodeDate.format(this.config.styling.dateFormat);
+		}
+  
 		airtimeCell.innerHTML = formattedTime;
-		airtimeCell.className = 'light traktAirtime';
+		airtimeCell.className = "light traktAirtime";
 	  });
   
 	  wrapper.appendChild(table);
@@ -152,20 +163,12 @@ Module.register("MMM-trakt", {
 	},
   
 	updateTrakt: function () {
-	  var self = this;
-	  if (self.config.client_id === "") {
-		self.log("ERROR - client_id not set");
-		return;
-	  }
-	  if (self.config.client_secret === "") {
-		self.log("ERROR - client_secret not set");
-		return;
-	  }
+	  if (!this.config.client_id || !this.config.client_secret) return;
 	  this.sendSocketNotification("PULL", {
-		client_id: self.config.client_id,
-		client_secret: self.config.client_secret,
-		days: self.config.days,
-		debug: self.config.debug
+		client_id: this.config.client_id,
+		client_secret: this.config.client_secret,
+		days: this.config.days,
+		debug: this.config.debug
 	  });
 	},
   
@@ -183,26 +186,21 @@ Module.register("MMM-trakt", {
 	},
   
 	scheduleUpdate: function (delay) {
-	  if (typeof delay === "undefined" && delay < 0) {
-		delay = 0;
-	  }
+	  if (typeof delay === "undefined" && delay < 0) delay = 0;
 	  var self = this;
 	  setTimeout(function () {
 		self.updateTrakt();
-		setInterval(function () {
-		  self.updateTrakt();
-		}, self.config.updateInterval);
+		setInterval(() => self.updateTrakt(), self.config.updateInterval);
 	  }, delay);
 	},
   
 	log: function (msg) {
-	  Log.log("[" + (new Date(Date.now())).toLocaleTimeString() + "] - " + this.name + " - : ", msg);
+	  Log.log("[" + (new Date()).toLocaleTimeString() + "] - " + this.name + " - : ", msg);
 	},
   
 	debugLog: function (msg) {
 	  if (this.config.debug) {
-		Log.log("[" + (new Date(Date.now())).toLocaleTimeString() + "] - DEBUG - " + this.name + " - : ", msg);
+		Log.log("[" + (new Date()).toLocaleTimeString() + "] - DEBUG - " + this.name + " - : ", msg);
 	  }
 	}
   });
-  

@@ -1,27 +1,25 @@
 const NodeHelper = require("node_helper");
-const Trakt = require("trakt.tv");
 const moment = require("moment");
 const fs = require("fs");
+const fetch = require("node-fetch"); // using node-fetch@2
 var importtoken;
 
 module.exports = NodeHelper.create({
     start: function () {
-        var events = [];
         this.fetchers = [];
-        console.log("Starting node helper for: " + this.name);
+        console.log("Starting node helper for: MMM-trakt");
     },
 
     createFetcher: function (client_id, client_secret, days) {
-        var self = this;
-        let options = {
-            client_id: client_id,
-            client_secret: client_secret,
-            redirect_uri: null,
-            api_url: null
-        };
-        const trakt = new Trakt(options);
+        const self = this;
+        const startDate = moment().subtract(1, 'd').format("YYYY-MM-DD");
+        const totalDays = isNaN(days) ? 5 : days + 2;
 
-        function importoldtoken() {
+        if (self.debug) {
+            console.log(`[MMM-trakt] Fetching episodes from ${startDate} for ${totalDays} days`);
+        }
+
+        function importOldToken() {
             return new Promise(function (fulfill, reject) {
                 try {
                     importtoken = require('./token.json');
@@ -32,78 +30,71 @@ module.exports = NodeHelper.create({
             });
         }
 
-        importoldtoken()
+        importOldToken()
             .catch(function () {
+                const Trakt = require("trakt.tv");
+                let trakt = new Trakt({
+                    client_id: client_id,
+                    client_secret: client_secret
+                });
+
                 return trakt.get_codes().then(function (poll) {
-                    self.log('Trakt Access Code: ' + poll.user_code);
                     self.sendSocketNotification("OAuth", {
                         code: poll.user_code
                     });
                     return trakt.poll_access(poll);
-                }).catch(error => {
-                    self.errorLog(error, new Error());
-                    return Promise.reject(error);
                 }).then(function () {
                     importtoken = trakt.export_token();
-                    fs.writeFile("./modules/MMM-trakt/token.json", JSON.stringify(importtoken), "utf8", function (err, data) {
-                        if (err) {
-                            return self.errorLog(err, new Error());
-                        }
-                    });
+                    fs.writeFile("./modules/MMM-trakt/token.json", JSON.stringify(importtoken), "utf8", function () {});
                 });
             })
             .then(function () {
-                trakt.import_token(importtoken)
-                    .then(() => {
-                        const startDate = moment().subtract(1, 'd').format("YYYY-MM-DD");
-                        const totalDays = isNaN(days) ? 5 : days + 2;
+                const url = `https://api.trakt.tv/calendars/my/shows/${startDate}/${totalDays}?extended=full&limit=100`;
 
-                        console.log("Making Trakt API call with:");
-                        console.log("  Start Date:", startDate);
-                        console.log("  Days:", totalDays);
-                        console.log("  Access Token Present:", !!importtoken?.access_token);
-                        console.log(`Request URL should be: https://api.trakt.tv/calendars/my/shows/${startDate}/${totalDays}`);
+                if (self.debug) {
+                    console.log(`[MMM-trakt] Making Trakt API call: ${url}`);
+                }
 
-                        return trakt.calendars.my.shows(startDate, totalDays, { extended: 'full' });
-                    })
-                    .then(shows => {
-                        self.sendSocketNotification("SHOWS", {
-                            shows: shows
-                        });
-                    })
-                    .catch(error => {
-                        console.error("Trakt API call failed with response body:");
-                        console.error(error.response?.body || error.message || error);
-                        self.errorLog(error, new Error());
+                return fetch(url, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${importtoken.access_token}`,
+                        "trakt-api-version": "2",
+                        "trakt-api-key": client_id
+                    }
+                })
+                .then(res => res.json())
+                .then(shows => {
+                    if (self.debug) {
+                        console.log(`[MMM-trakt] Received ${shows.length} episodes from Trakt`);
+                    } else {
+                        console.log(`[MMM-trakt] Synced ${shows.length} episodes`);
+                    }
+
+                    self.sendSocketNotification("SHOWS", {
+                        shows: shows
                     });
+                });
             })
             .catch(error => {
-                self.errorLog(error, new Error());
+                if (self.debug) {
+                    console.error(`[MMM-trakt] Trakt API error:`, error);
+                } else {
+                    console.error(`[MMM-trakt] Error: ${error.message || error}`);
+                }
             });
     },
 
     socketNotificationReceived: function (notification, payload) {
-        console.log("Socket payload received:", payload);
-        this.debug = payload.debug;
+        this.debug = payload.debug === true;
+        if (this.debug) {
+            console.log("[MMM-trakt] Debugging enabled");
+        }
 
         if (notification === "PULL") {
             const fallbackDays = typeof payload.days === "number" ? payload.days : 5;
             this.createFetcher(payload.client_id, payload.client_secret, fallbackDays);
         }
-    },
-
-    log: function (msg) {
-        console.log("[" + (new Date(Date.now())).toLocaleTimeString() + "] - " + this.name + " - : ", msg);
-    },
-
-    debugLog: function (msg) {
-        if (this.debug) {
-            console.log("[" + (new Date(Date.now())).toLocaleTimeString() + "] - DEBUG - " + this.name + " - : ", msg);
-        }
-    },
-
-    errorLog: function (error, errorObject) {
-        var stack = errorObject.stack.toString().split(/\r\n|\n/); // Line number
-        console.log("[" + (new Date(Date.now())).toLocaleTimeString() + "] - ERROR " + this.name + " : ", error, " - [" + stack[1] + "]");
     }
 });
