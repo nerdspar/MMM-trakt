@@ -36,6 +36,7 @@ Run the following commands after installing dependencies to ensure the correct v
 ```sh
 npm uninstall node-fetch
 npm install node-fetch@2
+```
 
 ## Configuration
 
