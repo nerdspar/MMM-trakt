@@ -132,7 +132,12 @@ module.exports = NodeHelper.create({
 
     const res = await fetch(TRAKT_TOKEN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "trakt-api-version": "2",
+        "trakt-api-key": client_id,
+        "User-Agent": "MMM-trakt/1.0"
+      },
       body: JSON.stringify(body)
     });
 
