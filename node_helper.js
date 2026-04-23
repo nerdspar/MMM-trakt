@@ -161,7 +161,8 @@ module.exports = NodeHelper.create({
           "Content-Type": "application/json",
           "Authorization": `Bearer ${access_token}`,
           "trakt-api-version": "2",
-          "trakt-api-key": client_id
+          "trakt-api-key": client_id,
+          "User-Agent": "MMM-trakt/1.0"
         }
       });
 
